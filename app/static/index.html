@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Moderation Assist — PoC</title>
+  <style>
+    :root {
+      --bg: #0f1419; --panel: #1a2129; --panel2: #232c36; --line: #2e3a46;
+      --text: #e6edf3; --muted: #8b97a3; --accent: #4da3ff;
+      --pass: #2ea043; --fail: #d1242f; --review: #d29922;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+           background: var(--bg); color: var(--text); }
+    header { padding: 20px 28px; border-bottom: 1px solid var(--line); }
+    h1 { margin: 0; font-size: 20px; }
+    .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    .kpis { display: flex; flex-wrap: wrap; gap: 14px; padding: 20px 28px; }
+    .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+           padding: 14px 18px; min-width: 150px; }
+    .kpi .val { font-size: 26px; font-weight: 700; }
+    .kpi .lbl { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .kpi.hero .val { color: var(--accent); }
+    .controls { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 28px 16px; align-items: center; }
+    select, input[type=text] { background: var(--panel2); color: var(--text);
+           border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; font-size: 13px; }
+    .layout { display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; padding: 0 28px 28px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; }
+    tbody tr { cursor: pointer; }
+    tbody tr:hover { background: var(--panel); }
+    tbody tr.selected { background: var(--panel2); }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+    .b-pass { background: rgba(46,160,67,.18); color: var(--pass); }
+    .b-fail { background: rgba(209,36,47,.18); color: var(--fail); }
+    .b-review { background: rgba(210,153,34,.18); color: var(--review); }
+    .b-approve { background: rgba(46,160,67,.18); color: var(--pass); }
+    .b-remove { background: rgba(209,36,47,.18); color: var(--fail); }
+    .conf { height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; width: 60px; }
+    .conf > i { display: block; height: 100%; background: var(--accent); }
+    .warn { color: var(--review); font-weight: 700; }
+    .flags { color: var(--muted); font-size: 11px; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; height: fit-content; position: sticky; top: 16px; }
+    .panel h3 { margin: 0 0 4px; }
+    .panel .body { background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+           padding: 12px; margin: 12px 0; white-space: pre-wrap; }
+    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .card { background: var(--panel2); border-radius: 8px; padding: 12px; }
+    .card.disagree { outline: 1px solid var(--review); }
+    .card h4 { margin: 0 0 8px; font-size: 12px; color: var(--muted); text-transform: uppercase; }
+    .reason { color: var(--muted); font-size: 12px; margin-top: 6px; }
+    .muted { color: var(--muted); }
+    .empty { color: var(--muted); padding: 40px; text-align: center; }
+    code { background: var(--panel2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Moderation Assist <span class="muted" style="font-weight:400">— LLM-powered triage PoC</span></h1>
+    <div class="sub">Each comment is classified for <b>moderation</b> (Pass/Fail) and <b>user type</b>, with reasoning, confidence, and a triage decision. A naive keyword baseline runs alongside so you can see what rules miss. <span id="provider"></span></div>
+  </header>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="controls">
+    <label class="muted">Moderation
+      <select id="f-moderation"><option value="">all</option><option>Pass</option><option>Fail</option></select>
+    </label>
+    <label class="muted">User type
+      <select id="f-usertype"><option value="">all</option><option>Patient</option><option>Caregiver</option><option>Healthcare Provider</option><option>Other</option></select>
+    </label>
+    <label class="muted">Triage
+      <select id="f-bucket"><option value="">all</option><option value="needs_review">needs review</option><option value="auto_approve">auto approve</option><option value="auto_remove">auto remove</option></select>
+    </label>
+    <label class="muted"><input type="checkbox" id="f-disagree" /> only LLM↔baseline disagreements</label>
+    <input type="text" id="f-q" placeholder="search text…" />
+  </div>
+
+  <div class="layout">
+    <div>
+      <table>
+        <thead><tr>
+          <th>Comment</th><th>Mod</th><th>User type</th><th>Conf</th><th>Triage</th><th>Δ</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div id="empty" class="empty" style="display:none">No comments match.</div>
+    </div>
+    <div class="panel" id="detail"><div class="muted">Select a comment to see the LLM reasoning and the keyword-baseline comparison.</div></div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
