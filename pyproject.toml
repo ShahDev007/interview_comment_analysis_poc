@@ -1,0 +1,29 @@
+[project]
+name = "comment-moderation-poc"
+version = "0.1.0"
+description = "LLM-assisted comment moderation proof of concept for a health community."
+requires-python = ">=3.10"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["data", ".playwright-mcp"]
+
+[tool.ruff.lint]
+# Pragmatic set: pyflakes (F), pycodestyle (E/W), isort (I), bugbear (B), pyupgrade (UP).
+select = ["E", "W", "F", "I", "B", "UP"]
+ignore = ["E501"]  # line length handled by the formatter, not enforced as a hard error
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true   # don't fail on third-party stubs (fastapi/anthropic)
+check_untyped_defs = true
+warn_unused_ignores = true
+# Lenient by design: this typecheck is advisory in the validation loop, meant to surface real
+# mistakes (undefined names, bad attribute access) without drowning the signal in strictness.
+disallow_untyped_defs = false
+exclude = ["tests/", "scripts/"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
